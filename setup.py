@@ -12,13 +12,13 @@ with open(join("spinup", "version.py")) as version_file:
 setup(
     name='spinup',
     py_modules=['spinup'],
-    version=__version__,#'0.1',
+    version=__version__,  # '0.1',
     install_requires=[
-        'cloudpickle==0.5.2',
+        'cloudpickle~=1.2.2',
         'gym[atari,box2d,classic_control]>=0.10.8',
         'ipython',
         'joblib',
-        'matplotlib==3.0.2',
+        'matplotlib==3.0.3',
         'mpi4py',
         'numpy',
         'pandas',
