@@ -141,6 +141,10 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
     # Note that the action placeholder going to actor_critic here is
     # irrelevant, because we only need q_targ(s, pi_targ(s)).
     model_pi_targ, model_q_targ = actor_critic(obs_dim=obs_dim, act_dim=act_dim, **ac_kwargs)
+    model_pi = model_pi.to(device)
+    model_q = model_q.to(device)
+    model_pi_targ = model_pi_targ.to(device)
+    model_q_targ = model_q_targ.to(device)
 
     # Experience buffer
     replay_buffer = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
