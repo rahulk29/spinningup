@@ -157,7 +157,7 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
 
     def get_action(o, noise_scale):
         model_pi.eval()
-        a = model_pi(o.reshape(1, -1))[0].cpu().numpy()
+        a = model_pi(torch.from_numpy(o.reshape(1, -1)))[0].detach().cpu().numpy()
         a += noise_scale * np.random.randn(act_dim)
         model_pi.train()
         return np.clip(a, -act_limit, act_limit)
@@ -247,7 +247,7 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
                 pi_loss.backward()
                 pi_optimizer.step()
 
-                logger.store(LossQ=q_loss.item(), QVals=q_val)
+                logger.store(LossQ=q_loss.item(), QVals=q_val.detach().cpu().numpy().squeeze(1))
                 logger.store(LossPi=pi_loss.item())
                 logger.store(EpRet=ep_ret, EpLen=ep_len)
                 o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
@@ -281,7 +281,7 @@ if __name__ == '__main__':
     import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--env', type=str, default='HalfCheetah-v2')
+parser.add_argument('--env', type=str, default='LunarLanderContinuous-v2')
 parser.add_argument('--hid', type=int, default=300)
 parser.add_argument('--l', type=int, default=1)
 parser.add_argument('--gamma', type=float, default=0.99)
