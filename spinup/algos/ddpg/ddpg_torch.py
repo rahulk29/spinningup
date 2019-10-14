@@ -253,8 +253,9 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
 
                 logger.store(LossQ=q_loss.item(), QVals=q_val.detach().cpu().numpy().squeeze(1))
                 logger.store(LossPi=pi_loss.item())
-                logger.store(EpRet=ep_ret, EpLen=ep_len)
-                o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
+            
+            logger.store(EpRet=ep_ret, EpLen=ep_len)
+            o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
 
                 # End of epoch wrap-up
         if t > 0 and t % steps_per_epoch == 0:
