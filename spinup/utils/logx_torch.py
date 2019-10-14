@@ -159,7 +159,7 @@ class Logger:
                 joblib.dump(state_dict, osp.join(self.output_dir, fname))
             except:
                 self.log('Warning: could not pickle state_dict.', color='red')
-            if hasattr(self, 'tf_saver_elements'):
+            if hasattr(self, 'torch_saver_elements'):
                 self._torch_save(itr)
 
     def setup_torch_saver(self, models):
@@ -171,7 +171,7 @@ class Logger:
         Args:
             models: The PyTorch models to save.
         """
-        self.torch_saver_dict = dict(models)
+        self.torch_saver_elements = dict(models)
 
     def _torch_save(self, itr=None):
         """
@@ -179,14 +179,16 @@ class Logger:
         to associated tensors to variables after restore. 
         """
         if proc_id() == 0:
-            assert hasattr(self, 'torch_saver_dict'), \
+            assert hasattr(self, 'torch_saver_elements'), \
                 "First have to setup saving with self.setup_torch_saver"
-            fpath = 'save' + ('%d' % itr if itr is not None else '')
+            fpath = 'saved_model' + ('%d' % itr if itr is not None else '')
             fpath = osp.join(self.output_dir, fpath)
             if osp.exists(fpath):
                 # delete fpath if it's there.
                 shutil.rmtree(fpath)
-            torch.save(fpath, self.torch_saver_dict)
+            for k, v in self.torch_saver_elements.items():
+                self.torch_saver_elements[k] = v.cpu()
+            torch.save(fpath, self.torch_saver_elements)
 
     def dump_tabular(self):
         """

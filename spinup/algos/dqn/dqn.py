@@ -129,22 +129,24 @@ def dqn(env_fn, action_value=core.mlp_action_value, ac_kwargs=dict(), seed=0,
 
         o = o2
 
-        batch = replay_buffer.sample_batch(batch_size)
-        feed_dict = {x_ph: batch['obs1'],
-                     x2_ph: batch['obs2'],
-                     r_ph: batch['rews'],
-                     d_ph: batch['done'],
-                     a_ph: a
-                     }
-
-        # Q-learning update
-        outs = sess.run([loss, q, train_q_op], feed_dict)
-        logger.store(Loss=outs[0], QVals=outs[1])
-
         if d or (ep_len == max_ep_len):
             """
-            Store episode return at the end of trajectory
+            Perform all DQN updates at the end of the trajectory,
+            in accordance with tuning done by TD3 paper authors.
             """
+            for _ in range(ep_len):
+                batch = replay_buffer.sample_batch(batch_size)
+                feed_dict = {x_ph: batch['obs1'],
+                             x2_ph: batch['obs2'],
+                             r_ph: batch['rews'],
+                             d_ph: batch['done'],
+                             a_ph: a
+                             }
+
+                # Q-learning update
+                outs = sess.run([loss, q, train_q_op], feed_dict)
+                logger.store(Loss=outs[0], QVals=outs[1])
+
             logger.store(EpRet=ep_ret, EpLen=ep_len)
             o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
 
@@ -181,12 +183,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='CartPole-v0')
     parser.add_argument('--hid', type=int, default=300)
-    parser.add_argument('--l', type=int, default=5)
+    parser.add_argument('--l', type=int, default=1)
     parser.add_argument('--c', type=str, default=10)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--seed', '-s', type=int, default=0)
-    parser.add_argument('--epochs', type=int, default=200)
-    parser.add_argument('--exp_name', type=str, default='ddpg')
+    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--exp_name', type=str, default='dqn')
     parser.add_argument('--eps_start', type=str, default=1)
     parser.add_argument('--eps_end', type=str, default=0.1)
     parser.add_argument('--eps_step', type=str, default=1e-4)

@@ -66,9 +66,6 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
             ``q``        (batch,)          | Gives the current estimate of Q* for 
                                            | states in ``x_ph`` and actions in
                                            | ``a_ph``.
-            ``q_pi``     (batch,)          | Gives the composition of ``q`` and 
-                                           | ``pi`` for states in ``x_ph``: 
-                                           | q(x, pi(x)).
             ===========  ================  ======================================
 
         ac_kwargs (dict): Any kwargs appropriate for the actor_critic 
@@ -156,8 +153,8 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
         '\nNumber of parameters: \t pi: %d, \t q: %d, \t total: %d\n' % (var_counts[0], var_counts[1], sum(var_counts)))
 
     # Setup model saving
-    logger.setup_torch_saver({'mlp_pi': model_pi, 'mlp_q': model_q,
-                              'mlp_pi_targ': model_pi_targ, 'mlp_q_targ': model_q_targ})
+    logger.setup_torch_saver({'pi': model_pi, 'q': model_q,
+                              'pi_targ': model_pi_targ, 'q_targ': model_q_targ})
 
     def get_action(o, noise_scale):
         model_pi.eval()
@@ -242,15 +239,15 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
                     backup = r + gamma * (1 - d) * model_q_targ(torch.cat([x, model_pi_targ(x)], dim=1))
 
                 # Q update
+                q_optimizer.zero_grad()
                 q_val = model_q(torch.cat([x, a], dim=1))
                 q_loss = ((q_val - backup) ** 2).mean()
-                q_optimizer.zero_grad()
                 q_loss.backward()
                 q_optimizer.step()
 
                 # Policy update
-                pi_loss = -model_q(torch.cat([x, model_pi(x)], dim=1)).mean()
                 pi_optimizer.zero_grad()
+                pi_loss = -model_q(torch.cat([x, model_pi(x)], dim=1)).mean()
                 pi_loss.backward()
                 pi_optimizer.step()
 
