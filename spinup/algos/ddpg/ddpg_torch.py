@@ -135,31 +135,31 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
     ac_kwargs['action_space'] = env.action_space
 
     # Main outputs from computation graph
-    model_pi, model_q, model_q_pi = actor_critic(obs_dim=obs_dim, act_dim=act_dim, **ac_kwargs)
+    model_pi, model_q = actor_critic(obs_dim=obs_dim, act_dim=act_dim, **ac_kwargs)
 
     # Target networks
     # Note that the action placeholder going to actor_critic here is
     # irrelevant, because we only need q_targ(s, pi_targ(s)).
-    model_pi_targ, _, model_q_pi_targ = actor_critic(obs_dim=obs_dim, act_dim=act_dim, **ac_kwargs)
+    model_pi_targ, model_q_targ = actor_critic(obs_dim=obs_dim, act_dim=act_dim, **ac_kwargs)
 
     # Experience buffer
     replay_buffer = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
 
     # Count variables
     var_counts = tuple(sum([np.prod(param.size()) for param in network.parameters()])
-                       for network in [model_pi, model_q, model_q_pi, model_pi_targ, model_q_pi_targ])
+                       for network in [model_pi, model_q, model_pi_targ, model_q_targ])
     print(
         '\nNumber of parameters: \t pi: %d, \t q: %d, \t total: %d\n' % (var_counts[0], var_counts[1], sum(var_counts)))
 
     # Setup model saving
-    logger.setup_torch_saver({'mlp_pi': model_pi, 'mlp_q': model_q, 'mlp_q_pi': model_q_pi,
-                              'mlp_pi_targ': model_pi_targ, 'mlp_q_pi_targ': model_q_pi_targ})
+    logger.setup_torch_saver({'mlp_pi': model_pi, 'mlp_q': model_q,
+                              'mlp_pi_targ': model_pi_targ, 'mlp_q_targ': model_q_targ})
 
     def get_action(o, noise_scale):
         model_pi.eval()
-        a = model_pi(torch.from_numpy(o.reshape(1, -1)))[0].detach().cpu().numpy()
+        with torch.no_grad():
+            a = model_pi(torch.from_numpy(o.reshape(1, -1)))[0].detach().cpu().numpy()
         a += noise_scale * np.random.randn(act_dim)
-        model_pi.train()
         return np.clip(a, -act_limit, act_limit)
 
     def test_agent(n=10):
@@ -175,7 +175,7 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
     start_time = time.time()
     o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
     total_steps = steps_per_epoch * epochs
-    model_q_pi_targ.eval()
+    model_q_targ.eval()
     model_pi_targ.eval()
 
     # Separate train ops for pi, q
@@ -185,7 +185,7 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
     # Initialize target network parameters
     for target_param, param in zip(model_pi_targ.parameters(), model_pi.parameters()):
         target_param.data.copy_(param.data)
-    for target_param, param in zip(model_q_pi_targ.parameters(), model_q_pi.parameters()):
+    for target_param, param in zip(model_q_targ.parameters(), model_q.parameters()):
         target_param.data.copy_(param.data)
 
     # Main loop: collect experience in env and update/log each epoch
@@ -223,6 +223,8 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
             Perform all DDPG updates at the end of the trajectory,
             in accordance with tuning done by TD3 paper authors.
             """
+            model_q.train()
+            model_pi.train()
             for _ in range(ep_len):
                 batch = replay_buffer.sample_batch(batch_size)
                 x = torch.from_numpy(batch['obs1']).to(device)
@@ -232,7 +234,8 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
                 d = torch.from_numpy(batch['done']).to(device)
 
                 # Bellman backup for Q function
-                backup = r + gamma * (1 - d) * model_q_pi_targ(torch.cat([x, a], dim=1))
+                with torch.no_grad():
+                    backup = r + gamma * (1 - d) * model_q_targ(torch.cat([x, model_pi_targ(x)], dim=1))
 
                 # Q update
                 q_val = model_q(torch.cat([x, a], dim=1))
@@ -242,7 +245,7 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
                 q_optimizer.step()
 
                 # Policy update
-                pi_loss = model_q_pi(torch.cat([x, a], dim=1)).mean()
+                pi_loss = -model_q(torch.cat([x, model_pi(x)], dim=1)).mean()
                 pi_optimizer.zero_grad()
                 pi_loss.backward()
                 pi_optimizer.step()

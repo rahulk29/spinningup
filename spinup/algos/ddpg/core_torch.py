@@ -51,8 +51,4 @@ def mlp_actor_critic(obs_dim,
                 hidden_sizes=list(hidden_sizes) + [1],
                 activation=activation,
                 output_activation=None)
-    mlp_q_pi = MLP(in_features=obs_dim + act_dim,
-                   hidden_sizes=list(hidden_sizes) + [1],
-                   activation=activation,
-                   output_activation=None)
-    return mlp_pi, mlp_q, mlp_q_pi
+    return mlp_pi, mlp_q
