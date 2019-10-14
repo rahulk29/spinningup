@@ -162,7 +162,7 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
     def get_action(o, noise_scale):
         model_pi.eval()
         with torch.no_grad():
-            a = model_pi(torch.from_numpy(o.reshape(1, -1)))[0].detach().cpu().numpy()
+            a = model_pi(torch.from_numpy(o.reshape(1, -1)).to(device))[0].detach().cpu().numpy()
         a += noise_scale * np.random.randn(act_dim)
         return np.clip(a, -act_limit, act_limit)
 
