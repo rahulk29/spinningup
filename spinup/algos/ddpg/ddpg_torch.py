@@ -260,28 +260,28 @@ def ddpg(env_fn, actor_critic=core_torch.mlp_actor_critic, ac_kwargs=dict(), see
                 o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
 
                 # End of epoch wrap-up
-                if t > 0 and t % steps_per_epoch == 0:
-                    epoch = t // steps_per_epoch
+        if t > 0 and t % steps_per_epoch == 0:
+            epoch = t // steps_per_epoch
 
-                    # Save model
-                    if (epoch % save_freq == 0) or (epoch == epochs - 1):
-                        logger.save_state({'env': env}, None)
+            # Save model
+            if (epoch % save_freq == 0) or (epoch == epochs - 1):
+                logger.save_state({'env': env}, None)
 
-                    # Test the performance of the deterministic version of the agent.
-                    test_agent()
+            # Test the performance of the deterministic version of the agent.
+            test_agent()
 
-                    # Log info about epoch
-                    logger.log_tabular('Epoch', epoch)
-                    logger.log_tabular('EpRet', with_min_and_max=True)
-                    logger.log_tabular('TestEpRet', with_min_and_max=True)
-                    logger.log_tabular('EpLen', average_only=True)
-                    logger.log_tabular('TestEpLen', average_only=True)
-                    logger.log_tabular('TotalEnvInteracts', t)
-                    logger.log_tabular('QVals', with_min_and_max=True)
-                    logger.log_tabular('LossPi', average_only=True)
-                    logger.log_tabular('LossQ', average_only=True)
-                    logger.log_tabular('Time', time.time() - start_time)
-                    logger.dump_tabular()
+            # Log info about epoch
+            logger.log_tabular('Epoch', epoch)
+            logger.log_tabular('EpRet', with_min_and_max=True)
+            logger.log_tabular('TestEpRet', with_min_and_max=True)
+            logger.log_tabular('EpLen', average_only=True)
+            logger.log_tabular('TestEpLen', average_only=True)
+            logger.log_tabular('TotalEnvInteracts', t)
+            logger.log_tabular('QVals', with_min_and_max=True)
+            logger.log_tabular('LossPi', average_only=True)
+            logger.log_tabular('LossQ', average_only=True)
+            logger.log_tabular('Time', time.time() - start_time)
+            logger.dump_tabular()
 
 
 if __name__ == '__main__':
