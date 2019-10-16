@@ -132,7 +132,7 @@ class Logger:
             with open(osp.join(self.output_dir, "config.json"), 'w') as out:
                 out.write(output)
 
-    def save_state(self, state_dict, itr=None):
+    def save_state(self, state_dict, model, itr=None):
         """
         Saves the state of an experiment.
 
@@ -159,36 +159,10 @@ class Logger:
                 joblib.dump(state_dict, osp.join(self.output_dir, fname))
             except:
                 self.log('Warning: could not pickle state_dict.', color='red')
-            if hasattr(self, 'torch_saver_elements'):
-                self._torch_save(itr)
-
-    def setup_torch_saver(self, models):
-        """
-        Set up easy model saving for pytorch.
-
-        Call once, after defining your computation graph but before training.
-
-        Args:
-            models: The PyTorch models to save.
-        """
-        self.torch_saver_elements = dict(models)
-
-    def _torch_save(self, itr=None):
-        """
-        Uses simple_save to save a trained model, plus info to make it easy
-        to associated tensors to variables after restore. 
-        """
-        if proc_id() == 0:
-            assert hasattr(self, 'torch_saver_elements'), \
-                "First have to setup saving with self.setup_torch_saver"
-            fpath = 'saved_model' + ('%d' % itr if itr is not None else '')
-            fpath = osp.join(self.output_dir, fpath)
-            if osp.exists(fpath):
-                # delete fpath if it's there.
-                shutil.rmtree(fpath)
-            for k, v in self.torch_saver_elements.items():
-                self.torch_saver_elements[k] = v.cpu()
-            torch.save(fpath, self.torch_saver_elements)
+            
+            fname = 'saved_model' + ('%d' % itr if itr is not None else '') + '.pt'
+            fname = osp.join(self.output_dir, fname)
+            torch.save(model.cpu(), fname)
 
     def dump_tabular(self):
         """

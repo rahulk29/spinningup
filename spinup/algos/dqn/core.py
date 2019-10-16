@@ -30,7 +30,8 @@ Actor-Critics
 """
 
 
-def mlp_action_value(x, act_dim, hidden_sizes=(400, 300), activation=tf.nn.relu):
+def mlp_action_value(x, hidden_sizes=(400, 300), activation=tf.nn.relu, output_activation=None, action_space=None):
+    act_num = action_space.n
     with tf.variable_scope('q'):
-        q = mlp(x, list(hidden_sizes) + [act_dim], activation, None)
+        q = mlp(x, list(hidden_sizes) + [act_num], activation, output_activation)
     return q

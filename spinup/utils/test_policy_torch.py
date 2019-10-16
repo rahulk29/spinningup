@@ -6,28 +6,21 @@ import torch
 from spinup import EpochLogger
 from spinup.utils.logx import restore_tf_graph
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 
 def load_policy(fpath, itr='last', deterministic=False):
     # handle which epoch to load from
     if itr == 'last':
-        saves = [int(x[11:]) for x in os.listdir(fpath) if 'saved_momdel' in x and len(x) > 11]
+        saves = [int(x[11:]) for x in os.listdir(fpath) if 'saved_model' in x and len(x) > 11]
         itr = '%d' % max(saves) if len(saves) > 0 else ''
     else:
         itr = '%d' % itr
 
     model = torch.load(fpath)
 
-    # get the correct op for executing actions
-    if deterministic and 'mu' in model.keys():
-        # 'deterministic' is only a valid option for SAC policies
-        print('Using deterministic action op.')
-        action_op = model['mu']
-    else:
-        print('Using default action op.')
-        action_op = model['pi']
-
     # make function for producing an action given a single state
-    get_action = lambda x: action_op(x[None, :])[0]
+    get_action = lambda x: model.policy(torch.from_numpy(x[None, :]).to(device))[0].detach().cpu().numpy()
 
     # try to load environment from save
     # (sometimes this will fail because the environment could not be pickled)

@@ -13,16 +13,18 @@ class ReplayBuffer:
     A simple FIFO experience replay buffer for DDPG agents.
     """
 
-    def __init__(self, obs_dim, act_dim, size):
+    def __init__(self, obs_dim, size):
         self.obs1_buf = np.zeros([size, obs_dim], dtype=np.float32)
         self.obs2_buf = np.zeros([size, obs_dim], dtype=np.float32)
+        self.acts_buf = np.zeros(size, dtype=np.int32)
         self.rews_buf = np.zeros(size, dtype=np.float32)
         self.done_buf = np.zeros(size, dtype=np.float32)
         self.ptr, self.size, self.max_size = 0, 0, size
 
-    def store(self, obs, rew, next_obs, done):
+    def store(self, obs, act, rew, next_obs, done):
         self.obs1_buf[self.ptr] = obs
         self.obs2_buf[self.ptr] = next_obs
+        self.acts_buf[self.ptr] = act
         self.rews_buf[self.ptr] = rew
         self.done_buf[self.ptr] = done
         self.ptr = (self.ptr + 1) % self.max_size
@@ -32,35 +34,40 @@ class ReplayBuffer:
         idxs = np.random.randint(0, self.size, size=batch_size)
         return dict(obs1=self.obs1_buf[idxs],
                     obs2=self.obs2_buf[idxs],
+                    acts=self.acts_buf[idxs],
                     rews=self.rews_buf[idxs],
                     done=self.done_buf[idxs])
 
 
 def dqn(env_fn, action_value=core.mlp_action_value, ac_kwargs=dict(), seed=0,
         steps_per_epoch=5000, epochs=100, replay_size=int(1e6), gamma=0.99,
-        q_lr=1e-3, batch_size=100, start_steps=10000, update_period=10,
-        eps_start=1, eps_end=0.1, eps_step=1e-4, max_ep_len=1000, logger_kwargs=dict(), save_freq=1):
+        lr=1e-3, batch_size=100, start_steps=10000, update_period=10, eps_start=1,
+        eps_end=0.1, eps_step=1e-4, max_ep_len=1000, logger_kwargs=dict(), save_freq=1):
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
+
     tf.set_random_seed(seed)
     np.random.seed(seed)
 
     env, test_env = env_fn(), env_fn()
     obs_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.n
+    act_num = env.action_space.n
+
+    # Share information about action space with policy architecture
+    ac_kwargs['action_space'] = env.action_space
 
     # Inputs to computation graph
     x_ph, x2_ph, r_ph, d_ph = core.placeholders(obs_dim, obs_dim, None, None)
     a_ph = tf.placeholder(tf.int32)
 
     with tf.variable_scope('main'):
-        q = mlp_action_value(x_ph, act_dim, **ac_kwargs)
+        q = mlp_action_value(x_ph, **ac_kwargs)
 
     with tf.variable_scope('target'):
-        q_targ = mlp_action_value(x2_ph, act_dim, **ac_kwargs)
+        q_targ = mlp_action_value(x2_ph, **ac_kwargs)
 
     # Experience buffer
-    replay_buffer = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
+    replay_buffer = ReplayBuffer(obs_dim=obs_dim, size=replay_size)
 
     # Count variables
     var_counts = tuple(core.count_vars(scope) for scope in ['main'])
@@ -69,13 +76,13 @@ def dqn(env_fn, action_value=core.mlp_action_value, ac_kwargs=dict(), seed=0,
     # Bellman backup for Q function
     backup = tf.stop_gradient(r_ph + gamma * (1 - d_ph) * tf.reduce_max(q_targ, axis=1))
 
-    loss = tf.reduce_mean((tf.reduce_sum(tf.one_hot(a_ph, act_dim) * q, 1) - backup) ** 2)
+    loss = tf.reduce_mean((tf.reduce_sum(tf.one_hot(a_ph, act_num) * q, 1) - backup) ** 2)
 
     # Separate train ops for q
-    optimizer = tf.train.AdamOptimizer(learning_rate=q_lr)
+    optimizer = tf.train.AdamOptimizer(learning_rate=lr)
     train_q_op = optimizer.minimize(loss, var_list=get_vars('main/q'))
 
-    # Polyak averaging for target variables
+    # Update target variables
     target_update = tf.group([tf.assign(v_targ, v_main)
                               for v_main, v_targ in zip(get_vars('main'), get_vars('target'))])
 
@@ -92,9 +99,9 @@ def dqn(env_fn, action_value=core.mlp_action_value, ac_kwargs=dict(), seed=0,
 
     def get_action(o, eps):
         if np.random.random() < eps:
-            return np.squeeze(sess.run(tf.argmax(q, axis=1), feed_dict={x_ph: np.expand_dims(o, 0)}))
-        else:
             return env.action_space.sample()
+        else:
+            return np.squeeze(sess.run(tf.argmax(q, axis=1), feed_dict={x_ph: np.expand_dims(o, 0)}))
 
     def test_agent(n=10):
         for j in range(n):
@@ -125,33 +132,29 @@ def dqn(env_fn, action_value=core.mlp_action_value, ac_kwargs=dict(), seed=0,
         ep_len += 1
 
         # Store experience to replay buffer
-        replay_buffer.store(o, r, o2, d)
+        replay_buffer.store(o, a, r, o2, d)
 
         o = o2
 
         if d or (ep_len == max_ep_len):
-            """
-            Perform all DQN updates at the end of the trajectory,
-            in accordance with tuning done by TD3 paper authors.
-            """
-            for _ in range(ep_len):
-                batch = replay_buffer.sample_batch(batch_size)
-                feed_dict = {x_ph: batch['obs1'],
-                             x2_ph: batch['obs2'],
-                             r_ph: batch['rews'],
-                             d_ph: batch['done'],
-                             a_ph: a
-                             }
-
-                # Q-learning update
-                outs = sess.run([loss, q, train_q_op], feed_dict)
-                logger.store(Loss=outs[0], QVals=outs[1])
-
             logger.store(EpRet=ep_ret, EpLen=ep_len)
             o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
 
         if t % update_period == 0:
             sess.run([target_update])
+
+        batch = replay_buffer.sample_batch(batch_size)
+        feed_dict = {
+            x_ph: batch['obs1'],
+            x2_ph: batch['obs2'],
+            a_ph: batch['acts'],
+            r_ph: batch['rews'],
+            d_ph: batch['done']
+        }
+
+        # Q-learning update
+        outs = sess.run([loss, q, train_q_op], feed_dict)
+        logger.store(Loss=outs[0], QVals=outs[1])
 
         # End of epoch wrap-up
         if t > 0 and t % steps_per_epoch == 0:
