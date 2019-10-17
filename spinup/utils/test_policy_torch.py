@@ -12,12 +12,12 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 def load_policy(fpath, itr='last', deterministic=False):
     # handle which epoch to load from
     if itr == 'last':
-        saves = [int(x[11:]) for x in os.listdir(fpath) if 'saved_model' in x and len(x) > 11]
+        saves = [int(x[11:-3]) for x in os.listdir(fpath) if 'saved_model' in x and len(x) > 14]
         itr = '%d' % max(saves) if len(saves) > 0 else ''
     else:
         itr = '%d' % itr
 
-    model = torch.load(fpath)
+    model = torch.load(osp.join(fpath, 'saved_model' + itr + '.pt'))
 
     # make function for producing an action given a single state
     get_action = lambda x: model.policy(torch.from_numpy(x[None, :]).to(device))[0].detach().cpu().numpy()

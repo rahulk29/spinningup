@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import gym
 import time
-from spinup.algos.ddpg import core_torch
+from spinup.algos.ddpg import core_torch as core
 from spinup.utils.logx_torch import EpochLogger
 
 
@@ -31,87 +31,68 @@ class ReplayBuffer:
 
     def sample_batch(self, batch_size=32):
         idxs = np.random.randint(0, self.size, size=batch_size)
-        return dict(obs1=self.obs1_buf[idxs],
-                    obs2=self.obs2_buf[idxs],
-                    acts=self.acts_buf[idxs],
-                    rews=self.rews_buf[idxs],
-                    done=self.done_buf[idxs])
+        return dict(
+            obs1=self.obs1_buf[idxs],
+            obs2=self.obs2_buf[idxs],
+            acts=self.acts_buf[idxs],
+            rews=self.rews_buf[idxs],
+            done=self.done_buf[idxs])
 
 
 """
-
 Deep Deterministic Policy Gradient (DDPG)
-
 """
 
 
-def ddpg(env_fn, actor_critic=core_torch.ActorCritic, ac_kwargs=dict(), seed=0,
+def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
          steps_per_epoch=5000, epochs=100, replay_size=int(1e6), gamma=0.99,
          polyak=0.995, pi_lr=1e-3, q_lr=1e-3, batch_size=100, start_steps=10000,
          act_noise=0.1, max_ep_len=1000, logger_kwargs=dict(), save_freq=1):
     """
-
     Args:
         env_fn : A function which creates a copy of the environment.
             The environment must satisfy the OpenAI Gym API.
 
-        actor_critic: A function which takes in placeholder symbols
-            for state, ``x_ph``, and action, ``a_ph``, and returns the main
-            outputs from the agent's Tensorflow computation graph:
-
+        actor_critic: The agent's main model which takes some states ``x`` and
+            and actions ``a`` and returns a tuple of:
             ===========  ================  ======================================
             Symbol       Shape             Description
             ===========  ================  ======================================
             ``pi``       (batch, act_dim)  | Deterministically computes actions
                                            | from policy given states.
             ``q``        (batch,)          | Gives the current estimate of Q* for
-                                           | states in ``x_ph`` and actions in
-                                           | ``a_ph``.
+                                           | states ``x`` and actions in
+                                           | ``a``.
+            ``q_pi``     (batch,)          | Gives the composition of ``q`` and
+                                           | ``pi`` for states in ``x``:
+                                           | q(x, pi(x)).
             ===========  ================  ======================================
-
         ac_kwargs (dict): Any kwargs appropriate for the actor_critic
-            function you provided to DDPG.
-
+            class you provided to DDPG.
         seed (int): Seed for random number generators.
-
         steps_per_epoch (int): Number of steps of interaction (state-action pairs)
             for the agent and the environment in each epoch.
-
         epochs (int): Number of epochs to run and train agent.
-
         replay_size (int): Maximum length of replay buffer.
-
         gamma (float): Discount factor. (Always between 0 and 1.)
-
         polyak (float): Interpolation factor in polyak averaging for target
             networks. Target networks are updated towards main networks
             according to:
-
             .. math:: \\theta_{\\text{targ}} \\leftarrow
                 \\rho \\theta_{\\text{targ}} + (1-\\rho) \\theta
-
             where :math:`\\rho` is polyak. (Always between 0 and 1, usually
             close to 1.)
-
         pi_lr (float): Learning rate for policy.
-
         q_lr (float): Learning rate for Q-networks.
-
         batch_size (int): Minibatch size for SGD.
-
         start_steps (int): Number of steps for uniform-random action selection,
             before running real policy. Helps exploration.
-
         act_noise (float): Stddev for Gaussian exploration noise added to
             policy at training time. (At test time, no noise is added.)
-
         max_ep_len (int): Maximum length of trajectory / episode / rollout.
-
         logger_kwargs (dict): Keyword args for EpochLogger.
-
         save_freq (int): How often (in terms of gap between epochs) to save
             the current policy and value function.
-
     """
 
     logger = EpochLogger(**logger_kwargs)
@@ -136,8 +117,6 @@ def ddpg(env_fn, actor_critic=core_torch.ActorCritic, ac_kwargs=dict(), seed=0,
     main = actor_critic(in_features=obs_dim, **ac_kwargs).to(device)
 
     # Target networks
-    # Note that the action placeholder going to actor_critic here is
-    # irrelevant, because we only need q_targ(s, pi_targ(s)).
     target = actor_critic(in_features=obs_dim, **ac_kwargs).to(device)
     target.eval()
 
@@ -146,11 +125,12 @@ def ddpg(env_fn, actor_critic=core_torch.ActorCritic, ac_kwargs=dict(), seed=0,
 
     # Count variables
     var_counts = tuple(sum([np.prod(param.size()) for param in network.parameters()])
-                       for network in [main.pi, main.q, main])
-    print('\nNumber of parameters: \t pi: %d, \t q: %d, \t total: %d\n' % (var_counts[0], var_counts[1], var_counts[2]))
+                       for network in [main.policy, main.q, main])
+    print(
+        '\nNumber of parameters: \t pi: %d, \t q: %d, \t total: %d\n' % (var_counts[0], var_counts[1], sum(var_counts)))
 
     # Separate train ops for pi, q
-    pi_optimizer = torch.optim.Adam(params=main.pi.parameters(), lr=pi_lr)
+    pi_optimizer = torch.optim.Adam(params=main.policy.parameters(), lr=pi_lr)
     q_optimizer = torch.optim.Adam(params=main.q.parameters(), lr=q_lr)
 
     # Initialize target network parameters
@@ -160,8 +140,9 @@ def ddpg(env_fn, actor_critic=core_torch.ActorCritic, ac_kwargs=dict(), seed=0,
         # with torch.no_grad():
         # a = main.pi(torch.from_numpy(o[None, :]).to(device))[0].detach().cpu().numpy()
         # a += noise_scale * np.random.randn(act_dim)
-        pi = main.policy(torch.from_numpy(o[None, :]))
-        a = pi.detach().cpu().numpy()[0] + noise_scale * np.random.randn(act_dim)
+        with torch.no_grad():
+            pi = main.policy(torch.from_numpy(o[None, :]))
+            a = pi.cpu().numpy()[0] + noise_scale * np.random.randn(act_dim)
         return np.clip(a, -act_limit, act_limit)
 
     def test_agent(n=10):
@@ -183,8 +164,8 @@ def ddpg(env_fn, actor_critic=core_torch.ActorCritic, ac_kwargs=dict(), seed=0,
         main.eval()
         """
         Until start_steps have elapsed, randomly sample actions
-        from a uniform distribution for better exploration. Afterwards, 
-        use the learned policy (with some noise, via act_noise). 
+        from a uniform distribution for better exploration. Afterwards,
+        use the learned policy (with some noise, via act_noise).
         """
         if t > start_steps:
             a = get_action(o, act_noise)
@@ -209,11 +190,11 @@ def ddpg(env_fn, actor_critic=core_torch.ActorCritic, ac_kwargs=dict(), seed=0,
         o = o2
 
         if d or (ep_len == max_ep_len):
+            main.train()
             """
             Perform all DDPG updates at the end of the trajectory,
             in accordance with tuning done by TD3 paper authors.
             """
-            main.train()
             for _ in range(ep_len):
                 batch = replay_buffer.sample_batch(batch_size)
                 obs1 = torch.from_numpy(batch['obs1']).to(device)
@@ -227,7 +208,7 @@ def ddpg(env_fn, actor_critic=core_torch.ActorCritic, ac_kwargs=dict(), seed=0,
 
                 # Bellman backup for Q function
                 with torch.no_grad():
-                    backup = (rews + gamma * (1 - done) * q_pi_targ).detach()
+                    backup = (rews + gamma * (1 - done) * q_pi_targ)
 
                 # DDPG losses
                 pi_loss = -q_pi.mean()
@@ -237,7 +218,7 @@ def ddpg(env_fn, actor_critic=core_torch.ActorCritic, ac_kwargs=dict(), seed=0,
                 q_optimizer.zero_grad()
                 q_loss.backward()
                 q_optimizer.step()
-                logger.store(LossQ=q_loss.item(), QVals=q.data.numpy().squeeze(1))
+                logger.store(LossQ=q_loss.item(), QVals=q.data.numpy())
 
                 # Policy update
                 pi_optimizer.zero_grad()
@@ -296,7 +277,11 @@ if __name__ == '__main__':
 
     logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
 
-    ddpg(lambda: gym.make(args.env), actor_critic=core_torch.mlp_actor_critic,
-         ac_kwargs=dict(hidden_sizes=[args.hid] * args.l),
-         gamma=args.gamma, seed=args.seed, epochs=args.epochs,
-         logger_kwargs=logger_kwargs)
+    ddpg(
+        lambda: gym.make(args.env),
+        actor_critic=core.ActorCritic,
+        ac_kwargs=dict(hidden_sizes=[args.hid] * args.l),
+        gamma=args.gamma,
+        seed=args.seed,
+        epochs=args.epochs,
+        logger_kwargs=logger_kwargs)
