@@ -20,7 +20,10 @@ def load_policy(fpath, itr='last', deterministic=False):
     model = torch.load(osp.join(fpath, 'saved_model' + itr + '.pt'))
 
     # make function for producing an action given a single state
-    get_action = lambda x: model.policy(torch.from_numpy(x[None, :]).to(device))[0].detach().cpu().numpy()
+    if hasattr(model, 'policy'):
+        get_action = lambda x: model.policy(torch.Tensor(x[None, :]).to(device))[0].detach().cpu().numpy()
+    elif isinstance(model, dict):
+        get_action = lambda x: model['actor'](torch.Tensor(x[None, :]).to(device))[0][0].detach().cpu().numpy()
 
     # try to load environment from save
     # (sometimes this will fail because the environment could not be pickled)

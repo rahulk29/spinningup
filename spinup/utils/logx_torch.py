@@ -162,7 +162,7 @@ class Logger:
             
             fname = 'saved_model' + ('%d' % itr if itr is not None else '') + '.pt'
             fname = osp.join(self.output_dir, fname)
-            torch.save(model.cpu(), fname)
+            torch.save(model, fname)
 
     def dump_tabular(self):
         """

@@ -47,7 +47,8 @@ Deep Deterministic Policy Gradient (DDPG)
 def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
          steps_per_epoch=5000, epochs=100, replay_size=int(1e6), gamma=0.99,
          polyak=0.995, pi_lr=1e-3, q_lr=1e-3, batch_size=100, start_steps=10000,
-         act_noise=0.1, max_ep_len=1000, logger_kwargs=dict(), save_freq=1):
+         act_noise=0.1, max_ep_len=1000, logger_kwargs=dict(), save_freq=1,
+         visualize=False):
     """
     Args:
         env_fn : A function which creates a copy of the environment.
@@ -93,6 +94,7 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
         logger_kwargs (dict): Keyword args for EpochLogger.
         save_freq (int): How often (in terms of gap between epochs) to save
             the current policy and value function.
+        visualize (bool): Whether to visualize during training
     """
 
     logger = EpochLogger(**logger_kwargs)
@@ -141,7 +143,7 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
         # a = main.pi(torch.from_numpy(o[None, :]).to(device))[0].detach().cpu().numpy()
         # a += noise_scale * np.random.randn(act_dim)
         with torch.no_grad():
-            pi = main.policy(torch.from_numpy(o[None, :]))
+            pi = main.policy(torch.Tensor(o[None, :]))
             a = pi.cpu().numpy()[0] + noise_scale * np.random.randn(act_dim)
         return np.clip(a, -act_limit, act_limit)
 
@@ -177,6 +179,9 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
         ep_ret += r
         ep_len += 1
 
+        if visualize:
+            env.render()
+
         # Ignore the "done" signal if it comes from hitting the time
         # horizon (that is, when it's an artificial terminal signal
         # that isn't based on the agent's state)
@@ -197,11 +202,11 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
             """
             for _ in range(ep_len):
                 batch = replay_buffer.sample_batch(batch_size)
-                obs1 = torch.from_numpy(batch['obs1']).to(device)
-                obs2 = torch.from_numpy(batch['obs2']).to(device)
-                acts = torch.from_numpy(batch['acts']).to(device)
-                rews = torch.from_numpy(batch['rews']).to(device)
-                done = torch.from_numpy(batch['done']).to(device)
+                obs1 = torch.Tensor(batch['obs1']).to(device)
+                obs2 = torch.Tensor(batch['obs2']).to(device)
+                acts = torch.Tensor(batch['acts']).to(device)
+                rews = torch.Tensor(batch['rews']).to(device)
+                done = torch.Tensor(batch['done']).to(device)
 
                 _, q, q_pi = main(obs1, acts)
                 _, _, q_pi_targ = target(obs2, acts)
@@ -241,7 +246,7 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
 
             # Save model
             if (epoch % save_freq == 0) or (epoch == epochs - 1):
-                logger.save_state({'env': env}, main, None)
+                logger.save_state({'env': env}, main.cpu(), None)
 
             # Test the performance of the deterministic version of the agent.
             test_agent()
@@ -271,6 +276,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--exp_name', type=str, default='ddpg')
+    parser.add_argument('--visuzalize', type=bool, default=False)
     args = parser.parse_args()
 
     from spinup.utils.run_utils import setup_logger_kwargs
