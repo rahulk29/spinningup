@@ -167,11 +167,11 @@ def rdpg(env_fn, ac_kwargs=dict(), seed=0, visualize=False, trajectory_length=5,
             # cx = torch.zeros(batch_size, 50, requires_grad=True)
             # hx = torch.zeros(batch_size, 50, requires_grad=True)
 
-            target_cx = Variable(torch.zeros(batch_size, 50))
-            target_hx = Variable(torch.zeros(batch_size, 50))
-
-            cx = Variable(torch.zeros(batch_size, 50))
-            hx = Variable(torch.zeros(batch_size, 50))
+            # target_cx = Variable(torch.zeros(batch_size, 50))
+            # target_hx = Variable(torch.zeros(batch_size, 50))
+            #
+            # cx = Variable(torch.zeros(batch_size, 50))
+            # hx = Variable(torch.zeros(batch_size, 50))
 
             # we first get the data out of the sampled experience
             obs1 = np.stack(tuple(trajectory.obs1 for trajectory in experiences[t]))
