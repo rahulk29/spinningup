@@ -102,7 +102,7 @@ class ParameterNoise(object):
         for params, perturbed_params in zip(self.actor.parameters(), self.perturbed_actor.parameters()):
             # Update the parameters
             perturbed_params.data.copy_(params
-                                        # + torch.normal(mean=torch.zeros(params.shape), std=self.param_noise_stddev)
+                                        + torch.normal(mean=torch.zeros(params.shape), std=self.param_noise_stddev)
                                         )
 
     def adapt_param_noise(self, obs):
