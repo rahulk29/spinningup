@@ -167,11 +167,11 @@ def rdpg(env_fn, ac_kwargs=dict(), seed=0, visualize=False, trajectory_length=5,
             # cx = torch.zeros(batch_size, 50, requires_grad=True)
             # hx = torch.zeros(batch_size, 50, requires_grad=True)
 
-            # target_cx = Variable(torch.zeros(batch_size, 50))
-            # target_hx = Variable(torch.zeros(batch_size, 50))
-            #
-            # cx = Variable(torch.zeros(batch_size, 50))
-            # hx = Variable(torch.zeros(batch_size, 50))
+            target_cx = Variable(target_cx.data)
+            target_hx = Variable(target_hx.data)
+
+            cx = Variable(cx.data)
+            hx = Variable(hx.data)
 
             # we first get the data out of the sampled experience
             obs1 = np.stack(tuple(trajectory.obs1 for trajectory in experiences[t]))
@@ -222,15 +222,16 @@ def rdpg(env_fn, ac_kwargs=dict(), seed=0, visualize=False, trajectory_length=5,
         for _ in range(n):
             o, r, d, ep_ret, ep_len = test_env.reset(), 0, False, 0, 0
 
-            cx = Variable(torch.zeros(batch_size, 50))
-            hx = Variable(torch.zeros(batch_size, 50))
+            cx = Variable(torch.zeros(1, 50))
+            hx = Variable(torch.zeros(1, 50))
 
             while not (d or (ep_len == max_ep_len)):
                 # Take deterministic actions at test time (noise_scale=0)
-                # a, (hx, cx) = actor(torch.Tensor(o).to(device), (hx, cx))
-                # o, r, d, _ = test_env.step(a.detach().cpu().numpy())
+                with torch.no_grad():
+                    a, (hx, cx) = actor(torch.Tensor(o[None, :]).to(device), (hx, cx))
+                o, r, d, _ = test_env.step(a.detach().cpu().numpy()[0])
 
-                o, r, d, _ = test_env.step(get_action(o))
+                # o, r, d, _ = test_env.step(get_action(o, 0))
                 ep_ret += r
                 ep_len += 1
                 if visualize:
@@ -278,8 +279,8 @@ def rdpg(env_fn, ac_kwargs=dict(), seed=0, visualize=False, trajectory_length=5,
             ep_len = 0
             ep_ret = 0
 
-        if step > start_steps and step % steps_per_epoch == 0:
-            epoch = step // steps_per_epoch
+        if step > start_steps and (step - start_steps) % steps_per_epoch == 0:
+            epoch = (step - start_steps) // steps_per_epoch
 
             # Save model
             if (epoch % save_freq == 0) or (epoch == epochs - 1):
@@ -295,7 +296,7 @@ def rdpg(env_fn, ac_kwargs=dict(), seed=0, visualize=False, trajectory_length=5,
             logger.log_tabular('EpLen', average_only=True)
             logger.log_tabular('TestEpLen', average_only=True)
             logger.log_tabular('TotalEnvInteracts', step)
-            logger.log_tabular('QVals', with_min_and_max=True)
+            # logger.log_tabular('QVals', with_min_and_max=True)
             logger.log_tabular('LossPi', average_only=True)
             logger.log_tabular('LossQ', average_only=True)
             logger.log_tabular('Time', time.time() - start_time)

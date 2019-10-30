@@ -1,6 +1,8 @@
 # Algorithms
 from spinup.algos.ddpg.ddpg import ddpg
 from spinup.algos.ddpg.ddpg_torch import ddpg as ddpg_torch
+from spinup.algos.priority_ddpg.ddpg import ddpg as priority_ddpg
+from spinup.algos.psn_ddpg.ddpg import ddpg as psn_ddpg
 from spinup.algos.rdpg.rdpg import rdpg
 from spinup.algos.ppo.ppo import ppo
 from spinup.algos.sac.sac import sac

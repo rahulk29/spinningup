@@ -1,6 +1,6 @@
-import numpy as np
 import torch
 import torch.nn as nn
+from copy import deepcopy
 
 activations = {
     'tanh': nn.Tanh,
@@ -22,12 +22,12 @@ class MLP(nn.Module):
         self.layers = nn.ModuleList([nn.Linear(in_features=in_features,
                                                out_features=hidden_sizes[0])])
         for i, h in enumerate(hidden_sizes[1:]):
-            # self.layers.append(nn.LayerNorm((hidden_sizes[i])))
+            self.layers.append(nn.LayerNorm((hidden_sizes[i])))
             self.layers.append(activations[activation]())
             self.layers.append(nn.Linear(in_features=hidden_sizes[i],
                                          out_features=hidden_sizes[i + 1]))
         if output_activation is not None:
-            # self.layers.append(nn.LayerNorm((hidden_sizes[-1])))
+            self.layers.append(nn.LayerNorm((hidden_sizes[-1])))
             self.layers.append(activations[output_activation]())
 
     def forward(self, x):
@@ -70,3 +70,52 @@ class ActorCritic(nn.Module):
         q = self.q(torch.cat((x, a), dim=1))
         q_pi = self.q(torch.cat((x, pi), dim=1))
         return pi, q, q_pi
+
+
+class ParameterNoise(object):
+
+    def __init__(self, actor, param_noise_stddev=0.1, desired_action_stddev=0.1, adaption_coefficient=1.01):
+
+        self.actor = actor
+        self.perturbed_actor = deepcopy(self.actor)
+        self.param_noise_stddev = param_noise_stddev
+        self.desired_action_stddev = desired_action_stddev
+        self.adaption_coefficient = adaption_coefficient
+        self.set_perturbed_actor_updates()
+
+    def get_perturbable_parameters(self, model):
+        # Removing parameters that don't require parameter noise
+        parameters = []
+        for name, params in model.named_parameters():
+            parameters.append(params)
+
+        return parameters
+
+    def set_perturbed_actor_updates(self):
+        """
+        Update the perturbed actor parameters
+        :return:
+        """
+        # actor_perturbable_parameters = self.get_perturbable_parameters(self.actor)
+        # perturbed_actor_perturbable_parameters = self.get_perturbable_parameters(self.perturbed_actor)
+
+        for params, perturbed_params in zip(self.actor.parameters(), self.perturbed_actor.parameters()):
+            # Update the parameters
+            perturbed_params.data.copy_(params
+                                        # + torch.normal(mean=torch.zeros(params.shape), std=self.param_noise_stddev)
+                                        )
+
+    def adapt_param_noise(self, obs):
+        if self.param_noise_stddev is None:
+            return 0.
+        # Perturb a separate copy of the policy to adjust the scale for the next "real" perturbation.
+        self.set_perturbed_actor_updates()
+        with torch.no_grad():
+            adaptive_noise_distance = torch.pow(torch.mean(torch.pow(self.actor(obs) - self.perturbed_actor(obs), 2)),
+                                                0.5)
+        if adaptive_noise_distance > self.desired_action_stddev:
+            # Decrease stddev.
+            self.param_noise_stddev /= self.adaption_coefficient
+        else:
+            # Increase stddev.
+            self.param_noise_stddev *= self.adaption_coefficient

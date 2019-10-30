@@ -277,7 +277,6 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--exp_name', type=str, default='ddpg')
     parser.add_argument('--visuzalize', type=bool, default=False)
-    parser.add_argument('--act_noise', type=float, default=0.1)
     args = parser.parse_args()
 
     from spinup.utils.run_utils import setup_logger_kwargs

@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import gym
 import time
-from spinup.algos.ddpg import core_torch as core
+from spinup.algos.psn_ddpg import core
 from spinup.utils.logx_torch import EpochLogger
 
 
@@ -47,8 +47,8 @@ Deep Deterministic Policy Gradient (DDPG)
 def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
          steps_per_epoch=5000, epochs=100, replay_size=int(1e6), gamma=0.99,
          polyak=0.995, pi_lr=1e-3, q_lr=1e-3, batch_size=100, start_steps=10000,
-         act_noise=0.1, max_ep_len=1000, logger_kwargs=dict(), save_freq=1,
-         visualize=False):
+         max_ep_len=1000, logger_kwargs=dict(), save_freq=1, visualize=False,
+         param_noise_stddev=0.1, desired_action_stddev=0.1, adaption_coefficient=1.01):
     """
     Args:
         env_fn : A function which creates a copy of the environment.
@@ -88,13 +88,14 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
         batch_size (int): Minibatch size for SGD.
         start_steps (int): Number of steps for uniform-random action selection,
             before running real policy. Helps exploration.
-        act_noise (float): Stddev for Gaussian exploration noise added to
-            policy at training time. (At test time, no noise is added.)
         max_ep_len (int): Maximum length of trajectory / episode / rollout.
         logger_kwargs (dict): Keyword args for EpochLogger.
         save_freq (int): How often (in terms of gap between epochs) to save
             the current policy and value function.
         visualize (bool): Whether to visualize during training
+        param_noise_stddev (float): standard deviation of parameter space noise
+        desired_action_stddev (float): desired standard deviation of action
+        adaption_coefficient (float): coefficient of adaption
     """
 
     logger = EpochLogger(**logger_kwargs)
@@ -138,13 +139,18 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
     # Initialize target network parameters
     target.load_state_dict(main.state_dict())
 
-    def get_action(o, noise_scale):
+    parameter_noise = core.ParameterNoise(main.policy,
+                                          param_noise_stddev=param_noise_stddev,
+                                          desired_action_stddev=desired_action_stddev,
+                                          adaption_coefficient=adaption_coefficient)
+
+    def get_action(o, actor):
         # with torch.no_grad():
         # a = main.pi(torch.from_numpy(o[None, :]).to(device))[0].detach().cpu().numpy()
         # a += noise_scale * np.random.randn(act_dim)
         with torch.no_grad():
-            pi = main.policy(torch.Tensor(o[None, :]))
-            a = pi.cpu().numpy()[0] + noise_scale * np.random.randn(act_dim)
+            pi = actor(torch.Tensor(o[None, :]))
+            a = pi.cpu().numpy()[0]
         return np.clip(a, -act_limit, act_limit)
 
     def test_agent(n=10):
@@ -152,7 +158,7 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
             o, r, d, ep_ret, ep_len = test_env.reset(), 0, False, 0, 0
             while not (d or (ep_len == max_ep_len)):
                 # Take deterministic actions at test time (noise_scale=0)
-                o, r, d, _ = test_env.step(get_action(o, 0))
+                o, r, d, _ = test_env.step(get_action(o, main.policy))
                 ep_ret += r
                 ep_len += 1
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
@@ -167,10 +173,10 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
         """
         Until start_steps have elapsed, randomly sample actions
         from a uniform distribution for better exploration. Afterwards,
-        use the learned policy (with some noise, via act_noise).
+        use the learned policy (with some noise, via perturbed_actor).
         """
         if t > start_steps:
-            a = get_action(o, act_noise)
+            a = get_action(o, parameter_noise.perturbed_actor)
         else:
             a = env.action_space.sample()
 
@@ -237,8 +243,16 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
                     p_target.data.copy_(polyak * p_target.data +
                                         (1 - polyak) * p_main.data)
 
+                logger.store(ParamNoiseStd=parameter_noise.param_noise_stddev)
+
             logger.store(EpRet=ep_ret, EpLen=ep_len)
             o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
+
+            # Update parameter noise
+            for _ in range(10):
+                batch = replay_buffer.sample_batch(batch_size)
+                obs1 = torch.Tensor(batch['obs1']).to(device)
+                parameter_noise.adapt_param_noise(obs1)
 
         # End of epoch wrap-up
         if t > 0 and t % steps_per_epoch == 0:
@@ -262,6 +276,7 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
             logger.log_tabular('LossPi', average_only=True)
             logger.log_tabular('LossQ', average_only=True)
             logger.log_tabular('Time', time.time() - start_time)
+            logger.log_tabular('ParamNoiseStd', with_min_and_max=True)
             logger.dump_tabular()
 
 
@@ -277,7 +292,6 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--exp_name', type=str, default='ddpg')
     parser.add_argument('--visuzalize', type=bool, default=False)
-    parser.add_argument('--act_noise', type=float, default=0.1)
     args = parser.parse_args()
 
     from spinup.utils.run_utils import setup_logger_kwargs
