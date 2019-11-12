@@ -2,8 +2,8 @@ import numpy as np
 import tensorflow as tf
 import gym
 import time
-from spinup.algos.td3 import core
-from spinup.algos.td3.core import get_vars
+from spinup.algos.per_td3 import core
+from spinup.algos.per_td3.core import get_vars
 from spinup.utils.logx import EpochLogger
 from spinup.utils.memory import PrioritizedReplayBuffer, Experience
 
@@ -148,6 +148,7 @@ def td3(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), seed=0,
     # Bellman backup for Q functions, using Clipped Double-Q targets
     min_q_targ = tf.minimum(q1_targ, q2_targ)
     backup = tf.stop_gradient(r_ph + gamma * (1 - d_ph) * min_q_targ)
+    td_error = tf.abs(q1 - backup) + tf.abs(q2 - backup)
 
     # TD3 losses
     pi_loss = -tf.reduce_mean(w_ph * q1_pi)
@@ -241,14 +242,18 @@ def td3(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), seed=0,
                              w_ph: is_weight
                              }
 
-                q_step_ops = [q_loss, q1, q2, train_q_op]
+                q_step_ops = [q_loss, q1, q2, train_q_op, td_error]
                 outs = sess.run(q_step_ops, feed_dict)
+                td_error_val = outs[4]
                 logger.store(LossQ=outs[0], Q1Vals=outs[1], Q2Vals=outs[2])
 
                 if j % policy_delay == 0:
                     # Delayed policy update
                     outs = sess.run([pi_loss, train_pi_op, target_update], feed_dict)
                     logger.store(LossPi=outs[0])
+
+                for idx, error in zip(idxs, td_error_val):
+                    replay_buffer.update(idx, error)
 
             logger.store(EpRet=ep_ret, EpLen=ep_len)
             o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0

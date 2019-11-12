@@ -3,8 +3,8 @@ import tensorflow as tf
 import gym
 import time
 import random
-from spinup.algos.td3 import core
-from spinup.algos.td3.core import get_vars
+from spinup.algos.td3 import core_randtarg as core
+from spinup.algos.td3.core_randtarg import get_vars
 from spinup.utils.logx import EpochLogger
 
 
