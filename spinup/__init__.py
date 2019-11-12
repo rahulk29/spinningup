@@ -6,7 +6,9 @@ from spinup.algos.psn_ddpg.ddpg import ddpg as psn_ddpg
 from spinup.algos.rdpg.rdpg import rdpg
 from spinup.algos.ppo.ppo import ppo
 from spinup.algos.sac.sac import sac
+from spinup.algos.td3.td3_randtarg import td3 as td3_randtarg
 from spinup.algos.td3.td3 import td3
+from spinup.algos.per_td3.td3 import td3 as per_td3
 from spinup.algos.trpo.trpo import trpo
 from spinup.algos.vpg.vpg import vpg
 from spinup.algos.dqn.dqn import dqn

@@ -2,31 +2,52 @@ import numpy as np
 import tensorflow as tf
 import gym
 import time
+import random
 from spinup.algos.td3 import core
-from spinup.algos.td3.td3_randtarg import ReplayBuffer
 from spinup.algos.td3.core import get_vars
 from spinup.utils.logx import EpochLogger
-from spinup.utils.run_utils import ExperimentGrid
 
+
+class ReplayBuffer:
+    """
+    A simple FIFO experience replay buffer for TD3 agents.
+    """
+
+    def __init__(self, obs_dim, act_dim, size):
+        self.obs1_buf = np.zeros([size, obs_dim], dtype=np.float32)
+        self.obs2_buf = np.zeros([size, obs_dim], dtype=np.float32)
+        self.acts_buf = np.zeros([size, act_dim], dtype=np.float32)
+        self.rews_buf = np.zeros(size, dtype=np.float32)
+        self.done_buf = np.zeros(size, dtype=np.float32)
+        self.ptr, self.size, self.max_size = 0, 0, size
+
+    def store(self, obs, act, rew, next_obs, done):
+        self.obs1_buf[self.ptr] = obs
+        self.obs2_buf[self.ptr] = next_obs
+        self.acts_buf[self.ptr] = act
+        self.rews_buf[self.ptr] = rew
+        self.done_buf[self.ptr] = done
+        self.ptr = (self.ptr+1) % self.max_size
+        self.size = min(self.size+1, self.max_size)
+
+    def sample_batch(self, batch_size=32):
+        idxs = np.random.randint(0, self.size, size=batch_size)
+        return dict(obs1=self.obs1_buf[idxs],
+                    obs2=self.obs2_buf[idxs],
+                    acts=self.acts_buf[idxs],
+                    rews=self.rews_buf[idxs],
+                    done=self.done_buf[idxs])
 
 """
 
-Exercise 2.3: Details Matter
-
-In this exercise, you will run TD3 with a tiny implementation difference,
-pertaining to how target actions are calculated. Your goal is to determine 
-whether or not there is any change in performance, and if so, explain why.
-
-You do NOT need to write code for this exercise.
+TD3 (Twin Delayed DDPG)
 
 """
-
 def td3(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=5000, epochs=100, replay_size=int(1e6), gamma=0.99, 
         polyak=0.995, pi_lr=1e-3, q_lr=1e-3, batch_size=100, start_steps=10000, 
         act_noise=0.1, target_noise=0.2, noise_clip=0.5, policy_delay=2, 
-        max_ep_len=1000, logger_kwargs=dict(), save_freq=1, 
-        remove_action_clip=False):
+        max_ep_len=1000, logger_kwargs=dict(), save_freq=1):
     """
 
     Args:
@@ -105,9 +126,6 @@ def td3(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), seed=0,
         save_freq (int): How often (in terms of gap between epochs) to save
             the current policy and value function.
 
-        remove_action_clip (bool): Special arg for this exercise. Controls
-            whether or not to clip the target action after adding noise to it.
-
     """
 
     logger = EpochLogger(**logger_kwargs)
@@ -131,11 +149,11 @@ def td3(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), seed=0,
 
     # Main outputs from computation graph
     with tf.variable_scope('main'):
-        pi, q1, q2, q1_pi = actor_critic(x_ph, a_ph, **ac_kwargs)
+        pi, q1, q2, q1_pi, q2_pi = actor_critic(x_ph, a_ph, **ac_kwargs)
     
     # Target policy network
     with tf.variable_scope('target'):
-        pi_targ, _, _, _  = actor_critic(x2_ph, a_ph, **ac_kwargs)
+        pi_targ, _, _, _, _ = actor_critic(x2_ph, a_ph, **ac_kwargs)
     
     # Target Q networks
     with tf.variable_scope('target', reuse=True):
@@ -144,11 +162,10 @@ def td3(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), seed=0,
         epsilon = tf.random_normal(tf.shape(pi_targ), stddev=target_noise)
         epsilon = tf.clip_by_value(epsilon, -noise_clip, noise_clip)
         a2 = pi_targ + epsilon
-        if not(remove_action_clip):
-            a2 = tf.clip_by_value(a2, -act_limit, act_limit)
+        a2 = tf.clip_by_value(a2, -act_limit, act_limit)
 
         # Target Q-values, using action from target policy
-        _, q1_targ, q2_targ, _ = actor_critic(x2_ph, a2, **ac_kwargs)
+        _, q1_targ, q2_targ, _, _ = actor_critic(x2_ph, a2, **ac_kwargs)
 
     # Experience buffer
     replay_buffer = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
@@ -162,7 +179,8 @@ def td3(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), seed=0,
     backup = tf.stop_gradient(r_ph + gamma*(1-d_ph)*min_q_targ)
 
     # TD3 losses
-    pi_loss = -tf.reduce_mean(q1_pi)
+    pi_loss_1 = -tf.reduce_mean(q1_pi)
+    pi_loss_2 = -tf.reduce_mean(q2_pi)
     q1_loss = tf.reduce_mean((q1-backup)**2)
     q2_loss = tf.reduce_mean((q2-backup)**2)
     q_loss = q1_loss + q2_loss
@@ -170,7 +188,8 @@ def td3(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), seed=0,
     # Separate train ops for pi, q
     pi_optimizer = tf.train.AdamOptimizer(learning_rate=pi_lr)
     q_optimizer = tf.train.AdamOptimizer(learning_rate=q_lr)
-    train_pi_op = pi_optimizer.minimize(pi_loss, var_list=get_vars('main/pi'))
+    train_pi_op_1 = pi_optimizer.minimize(pi_loss_1, var_list=get_vars('main/pi'))
+    train_pi_op_2 = pi_optimizer.minimize(pi_loss_2, var_list=get_vars('main/pi'))
     train_q_op = q_optimizer.minimize(q_loss, var_list=get_vars('main/q'))
 
     # Polyak averaging for target variables
@@ -189,7 +208,7 @@ def td3(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), seed=0,
     logger.setup_tf_saver(sess, inputs={'x': x_ph, 'a': a_ph}, outputs={'pi': pi, 'q1': q1, 'q2': q2})
 
     def get_action(o, noise_scale):
-        a = sess.run(pi, feed_dict={x_ph: o.reshape(1,-1)})
+        a = sess.run(pi, feed_dict={x_ph: o.reshape(1,-1)})[0]
         a += noise_scale * np.random.randn(act_dim)
         return np.clip(a, -act_limit, act_limit)
 
@@ -257,7 +276,10 @@ def td3(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), seed=0,
 
                 if j % policy_delay == 0:
                     # Delayed policy update
-                    outs = sess.run([pi_loss, train_pi_op, target_update], feed_dict)
+                    if random.random() > 0.5:
+                        outs = sess.run([pi_loss_1, train_pi_op_1, target_update], feed_dict)
+                    else:
+                        outs = sess.run([pi_loss_2, train_pi_op_2, target_update], feed_dict)
                     logger.store(LossPi=outs[0])
 
             logger.store(EpRet=ep_ret, EpLen=ep_len)
@@ -292,26 +314,18 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='HalfCheetah-v2')
-    parser.add_argument('--h', type=int, default=300)
+    parser.add_argument('--hid', type=int, default=300)
     parser.add_argument('--l', type=int, default=1)
-    parser.add_argument('--num_runs', '-n', type=int, default=3)
-    parser.add_argument('--steps_per_epoch', '-s', type=int, default=5000)
-    parser.add_argument('--total_steps', '-t', type=int, default=int(5e4))
+    parser.add_argument('--gamma', type=float, default=0.99)
+    parser.add_argument('--seed', '-s', type=int, default=0)
+    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--exp_name', type=str, default='td3')
     args = parser.parse_args()
 
-    def td3_with_actor_critic(**kwargs):
-        td3(ac_kwargs=dict(hidden_sizes=[args.h]*args.l), 
-            start_steps=5000,
-            max_ep_len=150,
-            batch_size=64,
-            polyak=0.95,
-            **kwargs)
-
-    eg = ExperimentGrid(name='ex2-3_td3')
-    eg.add('replay_size', int(args.total_steps))
-    eg.add('env_name', args.env, '', True)
-    eg.add('seed', [10*i for i in range(args.num_runs)])
-    eg.add('epochs', int(args.total_steps / args.steps_per_epoch))
-    eg.add('steps_per_epoch', args.steps_per_epoch)
-    eg.add('remove_action_clip', [False, True])
-    eg.run(td3_with_actor_critic, datestamp=True)
+    from spinup.utils.run_utils import setup_logger_kwargs
+    logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
+    
+    td3(lambda : gym.make(args.env), actor_critic=core.mlp_actor_critic,
+        ac_kwargs=dict(hidden_sizes=[args.hid]*args.l),
+        gamma=args.gamma, seed=args.seed, epochs=args.epochs,
+        logger_kwargs=logger_kwargs)

@@ -48,7 +48,7 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
          steps_per_epoch=5000, epochs=100, replay_size=int(1e6), gamma=0.99,
          polyak=0.995, pi_lr=1e-3, q_lr=1e-3, batch_size=100, start_steps=10000,
          act_noise=0.1, max_ep_len=1000, logger_kwargs=dict(), save_freq=1,
-         visualize=False):
+         visualize=False, layer_normal=False):
     """
     Args:
         env_fn : A function which creates a copy of the environment.
@@ -278,6 +278,7 @@ if __name__ == '__main__':
     parser.add_argument('--exp_name', type=str, default='ddpg')
     parser.add_argument('--visuzalize', type=bool, default=False)
     parser.add_argument('--act_noise', type=float, default=0.1)
+    parser.add_argument('--layer_normal', type=bool, default=False)
     args = parser.parse_args()
 
     from spinup.utils.run_utils import setup_logger_kwargs

@@ -27,7 +27,6 @@ class MLP(nn.Module):
             self.layers.append(nn.Linear(in_features=hidden_sizes[i],
                                          out_features=hidden_sizes[i + 1]))
         if output_activation is not None:
-            self.layers.append(nn.LayerNorm((hidden_sizes[-1])))
             self.layers.append(activations[output_activation]())
 
     def forward(self, x):

@@ -15,19 +15,19 @@ activations = {
 
 class MLP(nn.Module):
     def __init__(self, in_features, hidden_sizes=(32,), activation='tanh',
-                 output_activation=None, output_scale=1, output_squeeze=False):
+                 output_activation=None, output_scale=1, output_squeeze=False, layer_normal=False):
         super(MLP, self).__init__()
         self.output_scale = output_scale
         self.output_squeeze = output_squeeze
         self.layers = nn.ModuleList([nn.Linear(in_features=in_features,
                                                out_features=hidden_sizes[0])])
         for i, h in enumerate(hidden_sizes[1:]):
-            # self.layers.append(nn.LayerNorm((hidden_sizes[i])))
+            if layer_normal:
+                self.layers.append(nn.LayerNorm((hidden_sizes[i])))
             self.layers.append(activations[activation]())
             self.layers.append(nn.Linear(in_features=hidden_sizes[i],
                                          out_features=hidden_sizes[i + 1]))
         if output_activation is not None:
-            # self.layers.append(nn.LayerNorm((hidden_sizes[-1])))
             self.layers.append(activations[output_activation]())
 
     def forward(self, x):

@@ -176,7 +176,7 @@ def ddpg(env_fn, actor_critic=core.ActorCritic, ac_kwargs=dict(), seed=0,
         use the learned policy (with some noise, via perturbed_actor).
         """
         if t > start_steps:
-            a = get_action(o, main.policy)
+            a = get_action(o, parameter_noise.perturbed_actor)
         else:
             a = env.action_space.sample()
 
