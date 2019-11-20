@@ -1,0 +1,41 @@
+{
+    "ac_kwargs":	{},
+    "act_noise":	0.1,
+    "batch_size":	100,
+    "env_fn":	"<function call_experiment.<locals>.thunk_plus.<locals>.<lambda> at 0x10f65fbf8>",
+    "epochs":	100,
+    "exp_name":	"test",
+    "gamma":	0.99,
+    "layer_normal":	false,
+    "logger":	{
+        "<spinup.utils.logx_torch.EpochLogger object at 0x10f666208>":	{
+            "epoch_dict":	{},
+            "exp_name":	"test",
+            "first_row":	true,
+            "log_current_row":	{},
+            "log_headers":	[],
+            "output_dir":	"/Users/rahul/Documents/acads/fa19/287cs/spinningup/data/test/test_s0",
+            "output_file":	{
+                "<_io.TextIOWrapper name='/Users/rahul/Documents/acads/fa19/287cs/spinningup/data/test/test_s0/progress.txt' mode='w' encoding='UTF-8'>":	{
+                    "mode":	"w"
+                }
+            }
+        }
+    },
+    "logger_kwargs":	{
+        "exp_name":	"test",
+        "output_dir":	"/Users/rahul/Documents/acads/fa19/287cs/spinningup/data/test/test_s0"
+    },
+    "max_ep_len":	1000,
+    "num_policy_nets":	4,
+    "num_q_nets":	4,
+    "pi_lr":	0.001,
+    "polyak":	0.995,
+    "q_lr":	0.001,
+    "replay_size":	1000000,
+    "save_freq":	1,
+    "seed":	0,
+    "start_steps":	10000,
+    "steps_per_epoch":	5000,
+    "visualize":	false
+}

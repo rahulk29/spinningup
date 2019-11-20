@@ -12,7 +12,7 @@ from spinup.algos.per_td3.td3 import td3 as per_td3
 from spinup.algos.trpo.trpo import trpo
 from spinup.algos.vpg.vpg import vpg
 from spinup.algos.dqn.dqn import dqn
-
+from spinup.algos.ddpg_ens_per.ddpg_torch import ddpg_ens_per
 # Loggers
 from spinup.utils.logx import Logger, EpochLogger
 

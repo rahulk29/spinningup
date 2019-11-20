@@ -176,7 +176,7 @@ if __name__ == '__main__':
 
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'help'
     valid_algos = ['vpg', 'trpo', 'ppo', 'ddpg', 'td3', 'sac', 'dqn', 'ddpg_torch', 'rdpg', 'priority_ddpg', 'psn_ddpg',
-                   'per_td3', 'td3_randtarg']
+                   'per_td3', 'ddpg_ens_per', 'td3_randtarg']
     valid_utils = ['plot', 'test_policy', 'test_policy_torch']
     valid_help = ['--help', '-h', 'help']
     valid_cmds = valid_algos + valid_utils + valid_help
@@ -222,7 +222,7 @@ if __name__ == '__main__':
     elif cmd in valid_utils:
         # Execute the correct utility file.
         runfile = osp.join(osp.abspath(osp.dirname(__file__)), 'utils', cmd +'.py')
-        args = [sys.executable if sys.executable else 'python', runfile] + sys.argv[2:]
+        args = ['pythonw', runfile] + sys.argv[2:]
         subprocess.check_call(args, env=os.environ)
     else:
         # Assume that the user plans to execute an algorithm. Run custom
